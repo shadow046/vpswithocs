@@ -2,14 +2,14 @@
 #Initializing Var
 export DEBIAN_FRONTEND=noninteractive
 OS=`uname -m`;
-MYIP=$(curl https://ipinfo.io/ip);
+MYIP=$(wget -qO- ipv4.icanhazip.com);
 MYIP2="s/xxxxxxxxx/$MYIP/g";
 
 # Detect public IPv4 address and pre-fill for the user
 	apt install -y sudo
 	IP=$(ip -4 addr ls $EXT_INT | head -2 | tail -1 | cut -d' ' -f6 | cut -d'/' -f1)
 # If $IP is a private IP address, the server must be behind NAT
-	if echo "$IP" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
+	if echo "$MYIP" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
 		IP=$(curl https://ipinfo.io/ip)
 
 
@@ -186,7 +186,7 @@ persist-key
 persist-tun
 status openvpn-status.log
 log openvpn.log
-management "$IP" 7505
+management "$MYIP" 7505
 verb 3
 ncp-disable
 cipher AES-128-CBC" >> /etc/openvpn/server.conf
@@ -198,7 +198,7 @@ echo "client" > /etc/openvpn/client-template.txt
 	elif [[ "$PROTOCOL" = 'tcp' ]]; then
 		echo "proto tcp" >> /etc/openvpn/client-template.txt
 	fi
-echo "remote $IP $PORT
+echo "remote $MYIP $PORT
 dev tun
 auth-user-pass
 persist-key
@@ -222,7 +222,7 @@ setenv CLIENT_CERT 0
 #uncomment below for windows 10
 #setenv opt block-outside-dns # Prevent Windows 10 DNS leak" >> /etc/openvpn/client-template.txt
 cp /etc/openvpn/client-template.txt /home/panel/html/SunTuConfig.ovpn
-echo 'http-proxy' $IP $PORTS >> /home/panel/html/SunTuConfig.ovpn
+echo 'http-proxy' $MYIP $PORTS >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER ""' >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER "POST https://viber.com HTTP/1.1"' >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER "X-Forwarded-For: viber.com"' >> /home/panel/html/SunTuConfig.ovpn
