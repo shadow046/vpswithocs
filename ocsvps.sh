@@ -2,8 +2,80 @@
 #Initializing Var
 export DEBIAN_FRONTEND=noninteractive
 OS=`uname -m`;
-MYIP=$(wget -qO- ipv4.icanhazip.com);
+MYIP=$(curl https://ipinfo.io/ip);
 MYIP2="s/xxxxxxxxx/$MYIP/g";
+
+# Detect public IPv4 address and pre-fill for the user
+	apt install -y sudo
+	echo ""
+	echo 'Your IP is '"$MYIP" '.. What port do you want OpenVPN to listen to?'
+	echo "   1) Default: 1194"
+	echo "   2) Custom"
+	echo "   3) Random [49152-65535]"
+	until [[ "$PORT_CHOICE" =~ ^[1-3]$ ]]; do
+		read -rp "Port choice [1-3]: " -e -i 1 PORT_CHOICE
+	done
+	case $PORT_CHOICE in
+		1)
+			PORT="1194"
+		;;
+		2)
+			until [[ "$PORT" =~ ^[0-9]+$ ]] && [ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ]; do
+				read -rp "Custom port [1-65535]: " -e -i 1194 PORT
+			done
+		;;
+		3)
+			# Generate random number within private ports range
+			PORT=$(shuf -i49152-65535 -n1)
+			echo "Random Port: $PORT"
+		;;
+	esac
+	echo ""
+	echo "What protocol do you want OpenVPN to use?"
+	echo "UDP is faster. Unless it is not available, you shouldn't use TCP."
+	echo "   1) UDP"
+	echo "   2) TCP"
+	until [[ "$PROTOCOL_CHOICE" =~ ^[1-2]$ ]]; do
+		read -rp "Protocol [1-2]: " -e -i 2 PROTOCOL_CHOICE
+	done
+	case $PROTOCOL_CHOICE in
+		1)
+			PROTOCOL="udp"
+		;;
+		2)
+			PROTOCOL="tcp"
+		;;
+	esac
+	echo ""
+	echo "What Privoxy port do you want?"
+	echo "   1) Default: 8118"
+	echo "   2) Custom"
+	echo "   3) Random [49152-65535]"
+	until [[ "$PORT_PRIVO" =~ ^[1-3]$ ]]; do
+		read -rp "Port choice [1-3]: " -e -i 1 PORT_PRIVO
+	done
+	case $PORT_PRIVO in
+		1)
+			PORTS="8118"
+		;;
+		2)
+			until [[ "$PORTS" =~ ^[0-9]+$ ]] && [ "$PORTS" -ge 1 ] && [ "$PORTS" -le 65535 ]; do
+				read -rp "Custom port [1-65535]: " -e -i 8118 PORTS
+			done
+		;;
+		3)
+			# Generate random number within private ports range
+			PORTS=$(shuf -i49152-65535 -n1)
+			echo "Random Port: $PORTS"
+		;;
+	esac
+	echo ""
+	echo "Okay, that was all I needed. We are ready to setup your OpenVPN server now."
+	echo "You will be able to generate a client at the end of the installation."
+	APPROVE_INSTALL=${APPROVE_INSTALL:-n}
+	if [[ $APPROVE_INSTALL =~ n ]]; then
+		read -n1 -r -p "Press any key to continue..."
+	fi
 
 #lets go to root directory 1st
 cd
@@ -12,12 +84,12 @@ cd
 echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6
 sed -i '$ i\echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6' /etc/rc.local
 
-#Install wget curl iptables dnsutils openvpn screen whois ngrep unzip dnsutils dsniff lsb-release scrot nginx dropbear stunnel4 webmin and unrar
+#Install wget curl iptables dnsutils openvpn screen whois ngrep unzip dnsutils dsniff privoxy lsb-release scrot nginx dropbear stunnel4 webmin and unrar
 echo 'deb http://download.webmin.com/download/repository sarge contrib' >> /etc/apt/sources.list
 echo 'deb http://webmin.mirror.somersettechsolutions.co.uk/repository sarge contrib' >> /etc/apt/sources.list
 wget http://www.webmin.com/jcameron-key.asc
 apt-key add jcameron-key.asc
-apt-get update;apt-get -y install wget curl iptables dnsutils openvpn screen whois lsb-release scrot dnsutils dsniff ngrep unzip webmin fail2ban stunnel4 unrar nginx dropbear;
+apt-get update;apt-get -y install wget curl iptables dnsutils openvpn screen privoxy whois lsb-release scrot dnsutils dsniff ngrep unzip webmin fail2ban stunnel4 unrar nginx dropbear;
 
 # XML Parser
 cd
@@ -117,7 +189,7 @@ persist-key
 persist-tun
 status openvpn-status.log
 log openvpn.log
-management "$IP" 7505
+management "$MYIP" 7505
 verb 3
 ncp-disable
 cipher AES-128-CBC" >> /etc/openvpn/server.conf
@@ -129,7 +201,7 @@ echo "client" > /etc/openvpn/client-template.txt
 	elif [[ "$PROTOCOL" = 'tcp' ]]; then
 		echo "proto tcp" >> /etc/openvpn/client-template.txt
 	fi
-echo "remote $IP $PORT
+echo "remote $MYIP $PORT
 dev tun
 auth-user-pass
 persist-key
@@ -153,7 +225,7 @@ setenv CLIENT_CERT 0
 #uncomment below for windows 10
 #setenv opt block-outside-dns # Prevent Windows 10 DNS leak" >> /etc/openvpn/client-template.txt
 cp /etc/openvpn/client-template.txt /home/panel/html/SunTuConfig.ovpn
-echo 'http-proxy' $IP $PORTS >> /home/panel/html/SunTuConfig.ovpn
+echo 'http-proxy' $MYIP $PORTS >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER ""' >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER "POST https://viber.com HTTP/1.1"' >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER "X-Forwarded-For: viber.com"' >> /home/panel/html/SunTuConfig.ovpn
@@ -396,10 +468,45 @@ service dropbear restart
 wget -O screenfetch "https://raw.githubusercontent.com/shadow046/openvpndeb/master/screenfetch"
 chmod +x screenfetch
 
+cd /usr/local/sbin
+wget https://github.com/shadow046/vpswithocs/raw/master/menu.gz
+tar -xzvf menu.gz
+rm menu.gz
+chmod +x /usr/local/sbin/*
 
+#configure privoxy
+rm -f /etc/privoxy/config
+cat>>/etc/privoxy/config<<EOF
+user-manual /usr/share/doc/privoxy/user-manual
+confdir /etc/privoxy
+logdir /var/log/privoxy
+filterfile default.filter
+logfile logfile
+listen-address 0.0.0.0:$PORTS
+toggle 1
+enable-remote-toggle 0
+enable-remote-http-toggle 0
+enable-edit-actions 0
+enforce-blocks 0
+buffer-limit 4096
+enable-proxy-authentication-forwarding 1
+forwarded-connect-retries 1
+accept-intercepted-requests 1
+allow-cgi-request-crunching 1
+split-large-forms 0
+tolerate-pipelining 1
+socket-timeout 300
+permit-access 0.0.0.0/0 $MYIP
+EOF
 
-
-
-
-
-
+#restart all services
+chown -R www-data:www-data /home/panel/html
+service nginx start
+service openvpn restart
+service cron restart
+service ssh restart
+service dropbear restart
+service squid3 restart
+service webmin restart
+service privoxy restart
+rm -rf ~/.bash_history && history -c
