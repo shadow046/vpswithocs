@@ -4,7 +4,6 @@ export DEBIAN_FRONTEND=noninteractive
 OS=`uname -m`;
 MYIP=$(wget -qO- ipv4.icanhazip.com)
 MYIP2="s/xxxxxxxxx/$MYIP/g"
-
 # Detect public IPv4 address and pre-fill for the user
 	apt install -y sudo
 	IP=$(ip -4 addr ls $EXT_INT | head -2 | tail -1 | cut -d' ' -f6 | cut -d'/' -f1)
