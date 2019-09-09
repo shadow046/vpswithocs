@@ -7,6 +7,19 @@ MYIP2="s/xxxxxxxxx/$MYIP/g";
 
 # Detect public IPv4 address and pre-fill for the user
 	apt install -y sudo
+	IP=$(ip -4 addr ls $EXT_INT | head -2 | tail -1 | cut -d' ' -f6 | cut -d'/' -f1)
+# If $IP is a private IP address, the server must be behind NAT
+	if echo "$IP" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
+		IP=$(curl https://ipinfo.io/ip)
+
+
+#echo ""
+		#echo "It seems this server is behind NAT. What is its public IPv4 address or hostname?"
+		#echo "We need it for the clients to connect to the server."
+		#until [[ "$ENDPOINT" != "" ]]; do
+		#	read -rp "Public IPv4 address or hostname: " -e ENDPOINT
+		#done
+	fi
 	echo ""
 	echo 'Your IP is '"$MYIP" '.. What port do you want OpenVPN to listen to?'
 	echo "   1) Default: 1194"
@@ -140,26 +153,10 @@ sed -i 's|export KEY_OU=changeme|export KEY_OU=Shadow046|' /etc/openvpn/easy-rsa
 #Generate Diffie-Helman Pem
 openssl dhparam -out /etc/openvpn/dh2048.pem 2048
 
-# Create PKI
-cd /etc/openvpn/easy-rsa
-. ./vars
-./clean-all
-export EASY_RSA="${EASY_RSA:-.}"
-"$EASY_RSA/pkitool" --initca $*
-
-# Create key server
-export EASY_RSA="${EASY_RSA:-.}"
-"$EASY_RSA/pkitool" --server server
-
-# Setting KEY CN
-export EASY_RSA="${EASY_RSA:-.}"
-"$EASY_RSA/pkitool" client
-
 #Copy server.crt server.key ca.crt to openvpn directory
-cp /etc/openvpn/easy-rsa/keys/server.crt /etc/openvpn/server.crt
-cp /etc/openvpn/easy-rsa/keys/server.key /etc/openvpn/server.key
-cp /etc/openvpn/easy-rsa/keys/ca.crt /etc/openvpn/ca.crt
-cd
+wget -O /etc/openvpn/server.crt "https://raw.githubusercontent.com/shadow046/openvpndeb/master/server.crt"
+wget -O /etc/openvpn/server.key "https://raw.githubusercontent.com/shadow046/openvpndeb/master/server.key"
+wget -O /etc/openvpn/ca.crt "https://raw.githubusercontent.com/shadow046/openvpndeb/master/ca.crt"
 
 # Setting Server
 echo "port $PORT" > /etc/openvpn/server.conf
@@ -189,7 +186,7 @@ persist-key
 persist-tun
 status openvpn-status.log
 log openvpn.log
-management "$MYIP" 7505
+management "$IP" 7505
 verb 3
 ncp-disable
 cipher AES-128-CBC" >> /etc/openvpn/server.conf
@@ -201,7 +198,7 @@ echo "client" > /etc/openvpn/client-template.txt
 	elif [[ "$PROTOCOL" = 'tcp' ]]; then
 		echo "proto tcp" >> /etc/openvpn/client-template.txt
 	fi
-echo "remote $MYIP $PORT
+echo "remote $IP $PORT
 dev tun
 auth-user-pass
 persist-key
@@ -225,7 +222,7 @@ setenv CLIENT_CERT 0
 #uncomment below for windows 10
 #setenv opt block-outside-dns # Prevent Windows 10 DNS leak" >> /etc/openvpn/client-template.txt
 cp /etc/openvpn/client-template.txt /home/panel/html/SunTuConfig.ovpn
-echo 'http-proxy' $MYIP $PORTS >> /home/panel/html/SunTuConfig.ovpn
+echo 'http-proxy' $IP $PORTS >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER ""' >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER "POST https://viber.com HTTP/1.1"' >> /home/panel/html/SunTuConfig.ovpn
 echo 'http-proxy-option CUSTOM-HEADER "X-Forwarded-For: viber.com"' >> /home/panel/html/SunTuConfig.ovpn
